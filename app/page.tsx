@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function Page() {
   const [financeData, setFinanceData] = useState({
@@ -29,19 +29,18 @@ export default function Page() {
     source: ""
   });
 
-  /* ---------------- LOAD / SAVE ---------------- */
-
+  // LOAD DATA
   useEffect(() => {
     const saved = localStorage.getItem("finance-data");
     if (saved) setFinanceData(JSON.parse(saved));
   }, []);
 
+  // SAVE DATA
   useEffect(() => {
     localStorage.setItem("finance-data", JSON.stringify(financeData));
   }, [financeData]);
 
-  /* ---------------- TRANSACTIONS ---------------- */
-
+  // ADD TRANSACTION
   function addTransaction() {
     if (!txForm.amount) return;
 
@@ -73,8 +72,7 @@ export default function Page() {
     setTxForm({ type: "expense", amount: "", category: "", account: "us_checking" });
   }
 
-  /* ---------------- PAYSLIPS ---------------- */
-
+  // ADD PAYSLIP
   function addPayslip() {
     if (!payForm.gross) return;
 
@@ -100,68 +98,31 @@ export default function Page() {
     setPayForm({ gross: "", tax: "", country: "US", source: "" });
   }
 
-  /* ---------------- ANALYTICS ENGINE ---------------- */
-
-  const thisMonth = new Date().getMonth();
-  const thisYear = new Date().getFullYear();
-
-  const monthlyTx = financeData.transactions.filter(t => {
-    const d = new Date(t.date);
-    return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
-  });
-
-  const monthlyPayslips = financeData.payslips.filter(p => {
-    const d = new Date(p.date);
-    return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
-  });
-
-  const income = monthlyTx
+  const income = financeData.transactions
     .filter(t => t.type === "deposit")
     .reduce((s, t) => s + t.amount, 0);
 
-  const expenses = monthlyTx
+  const expenses = financeData.transactions
     .filter(t => t.type === "expense")
     .reduce((s, t) => s + t.amount, 0);
 
-  const payslipIncome = monthlyPayslips.reduce((s, p) => s + p.net, 0);
+  const savings = income - expenses;
 
-  const savings = payslipIncome - expenses;
-
-  /* ---------------- ACCOUNT INSIGHT ---------------- */
-
-  const accountStats = useMemo(() => {
-    const stats = {
-      us: 0,
-      il: 0
-    };
-
-    financeData.transactions.forEach(t => {
-      if (t.account.includes("us")) {
-        stats.us += t.type === "deposit" ? t.amount : -t.amount;
-      } else {
-        stats.il += t.type === "deposit" ? t.amount : -t.amount;
-      }
-    });
-
-    return stats;
-  }, [financeData]);
+  const accountKeys = Object.keys(financeData.accounts);
 
   return (
     <div className="min-h-screen bg-black text-white p-6 space-y-6">
 
-      {/* HEADER */}
+      {/* TITLE */}
       <div>
         <h1 className="text-3xl font-bold text-purple-400">
-          Finance Intelligence Dashboard
+          Finance Dashboard
         </h1>
-        <p className="text-gray-400">
-          Income • Spending • Payslips • Savings analysis
-        </p>
       </div>
 
       {/* TABS */}
       <div className="flex gap-2">
-        {["overview", "accounts", "transactions", "payslips", "insights"].map(t => (
+        {["overview", "accounts", "transactions", "payslips"].map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -176,47 +137,85 @@ export default function Page() {
 
       {/* OVERVIEW */}
       {tab === "overview" && (
-        <>
-          <div className="grid grid-cols-3 gap-4">
-            <Card title="Spending" value={expenses} color="red" />
-            <Card title="Payslip Income" value={payslipIncome} color="green" />
-            <Card title="Savings" value={savings} color="blue" />
-          </div>
-
-          <div className="bg-zinc-900 p-4 rounded-xl">
-            <h2 className="text-purple-300 font-bold">
-              Did you save this month?
-            </h2>
-            <p className="text-xl mt-2">
-              {savings >= 0 ? "✅ Yes" : "❌ No"}
-            </p>
-          </div>
-        </>
+        <div className="grid grid-cols-3 gap-4">
+          <Card title="Income" value={income} color="green" />
+          <Card title="Expenses" value={expenses} color="red" />
+          <Card title="Savings" value={savings} color="blue" />
+        </div>
       )}
 
       {/* ACCOUNTS */}
       {tab === "accounts" && (
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-zinc-900 p-4 rounded-xl">
-            <h2 className="text-blue-400">US Net</h2>
-            <p>${accountStats.us}</p>
-          </div>
-
-          <div className="bg-zinc-900 p-4 rounded-xl">
-            <h2 className="text-yellow-400">Israel Net</h2>
-            <p>${accountStats.il}</p>
-          </div>
+        <div className="grid grid-cols-3 gap-4">
+          {accountKeys.map(k => (
+            <div key={k} className="bg-zinc-900 p-4 rounded-xl">
+              <p className="text-gray-400">{k}</p>
+              <p className="text-blue-400 text-xl">
+                ${financeData.accounts[k]}
+              </p>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* TRANSACTIONS */}
+      {/* TRANSACTIONS (FIXED — INPUT IS HERE) */}
       {tab === "transactions" && (
-        <div className="bg-zinc-900 p-4 rounded-xl">
-          {monthlyTx.map(t => (
-            <div key={t.id} className="border-b border-zinc-700 py-1">
-              {t.type === "deposit" ? "+" : "-"} ${t.amount} | {t.category}
-            </div>
-          ))}
+        <div className="space-y-4">
+
+          {/* ADD FORM */}
+          <div className="bg-zinc-900 p-4 rounded-xl space-y-2">
+            <h2 className="text-purple-300 font-bold">Add Transaction</h2>
+
+            <input
+              className="bg-zinc-800 p-2 rounded w-full"
+              placeholder="Amount"
+              value={txForm.amount}
+              onChange={e => setTxForm({ ...txForm, amount: e.target.value })}
+            />
+
+            <select
+              className="bg-zinc-800 p-2 rounded w-full"
+              value={txForm.type}
+              onChange={e => setTxForm({ ...txForm, type: e.target.value })}
+            >
+              <option value="expense">Expense</option>
+              <option value="deposit">Deposit</option>
+            </select>
+
+            <input
+              className="bg-zinc-800 p-2 rounded w-full"
+              placeholder="Category"
+              value={txForm.category}
+              onChange={e => setTxForm({ ...txForm, category: e.target.value })}
+            />
+
+            <select
+              className="bg-zinc-800 p-2 rounded w-full"
+              value={txForm.account}
+              onChange={e => setTxForm({ ...txForm, account: e.target.value })}
+            >
+              <option value="us_checking">US Checking</option>
+              <option value="us_savings">US Savings</option>
+              <option value="il_account">Israel Account</option>
+            </select>
+
+            <button
+              onClick={addTransaction}
+              className="bg-purple-500 px-4 py-2 rounded"
+            >
+              Add Transaction
+            </button>
+          </div>
+
+          {/* LIST */}
+          <div className="bg-zinc-900 p-4 rounded-xl">
+            {financeData.transactions.map(t => (
+              <div key={t.id} className="border-b border-zinc-700 py-1">
+                {t.type === "deposit" ? "+" : "-"} ${t.amount} | {t.category}
+              </div>
+            ))}
+          </div>
+
         </div>
       )}
 
@@ -226,47 +225,26 @@ export default function Page() {
 
           <h2 className="text-purple-300 font-bold">Add Payslip</h2>
 
-          <input className="bg-zinc-800 p-2 rounded w-full"
+          <input
+            className="bg-zinc-800 p-2 rounded w-full"
             placeholder="Gross"
             value={payForm.gross}
             onChange={e => setPayForm({ ...payForm, gross: e.target.value })}
           />
 
-          <input className="bg-zinc-800 p-2 rounded w-full"
+          <input
+            className="bg-zinc-800 p-2 rounded w-full"
             placeholder="Tax"
             value={payForm.tax}
             onChange={e => setPayForm({ ...payForm, tax: e.target.value })}
           />
 
-          <button onClick={addPayslip} className="bg-green-500 px-4 py-2 rounded">
+          <button
+            onClick={addPayslip}
+            className="bg-green-500 px-4 py-2 rounded"
+          >
             Add Payslip
           </button>
-
-          {monthlyPayslips.map(p => (
-            <div key={p.id} className="border-b border-zinc-700 py-1">
-              Gross: ${p.gross} | Net: ${p.net} | {p.country}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* INSIGHTS */}
-      {tab === "insights" && (
-        <div className="bg-zinc-900 p-4 rounded-xl space-y-2">
-
-          <h2 className="text-purple-300 font-bold">Monthly Insights</h2>
-
-          <p>Income (Payslips): ${payslipIncome}</p>
-          <p>Spending: ${expenses}</p>
-          <p>Savings: ${savings}</p>
-
-          <hr className="border-zinc-700" />
-
-          <p>
-            {savings >= 0
-              ? "You are financially positive this month"
-              : "You are overspending compared to income"}
-          </p>
 
         </div>
       )}
