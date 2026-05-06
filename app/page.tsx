@@ -1,6 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar
+} from "recharts";
 
 export default function Page() {
   const [financeData, setFinanceData] = useState({
@@ -15,32 +25,37 @@ export default function Page() {
 
   const [tab, setTab] = useState("overview");
 
+  const [filter, setFilter] = useState({
+    month: "all",
+    year: "all"
+  });
+
   const [txForm, setTxForm] = useState({
-    type: "expense",
     amount: "",
+    type: "expense",
     category: "",
     account: "us_checking"
   });
 
-  const [payForm, setPayForm] = useState({
-    gross: "",
-    tax: "",
-    country: "US",
-    source: ""
+  const [transferForm, setTransferForm] = useState({
+    from: "us_checking",
+    to: "us_savings",
+    amount: ""
   });
 
-  // LOAD DATA
+  /* ---------------- LOAD / SAVE ---------------- */
+
   useEffect(() => {
     const saved = localStorage.getItem("finance-data");
     if (saved) setFinanceData(JSON.parse(saved));
   }, []);
 
-  // SAVE DATA
   useEffect(() => {
     localStorage.setItem("finance-data", JSON.stringify(financeData));
   }, [financeData]);
 
-  // ADD TRANSACTION
+  /* ---------------- ADD TRANSACTION ---------------- */
+
   function addTransaction() {
     if (!txForm.amount) return;
 
@@ -69,60 +84,99 @@ export default function Page() {
       };
     });
 
-    setTxForm({ type: "expense", amount: "", category: "", account: "us_checking" });
+    setTxForm({ amount: "", type: "expense", category: "", account: "us_checking" });
   }
 
-  // ADD PAYSLIP
-  function addPayslip() {
-    if (!payForm.gross) return;
+  /* ---------------- TRANSFER BETWEEN ACCOUNTS ---------------- */
 
-    const gross = parseFloat(payForm.gross);
-    const tax = parseFloat(payForm.tax || 0);
-    const net = gross - tax;
+  function transfer() {
+    const amount = parseFloat(transferForm.amount);
+    if (!amount) return;
 
-    const slip = {
-      id: Date.now(),
-      gross,
-      tax,
-      net,
-      country: payForm.country,
-      source: payForm.source || "Employer",
-      date: new Date().toISOString()
-    };
+    setFinanceData(prev => {
+      const updated = { ...prev.accounts };
 
-    setFinanceData(prev => ({
-      ...prev,
-      payslips: [...prev.payslips, slip]
-    }));
+      updated[transferForm.from] -= amount;
+      updated[transferForm.to] += amount;
 
-    setPayForm({ gross: "", tax: "", country: "US", source: "" });
+      const tx = {
+        id: Date.now(),
+        type: "transfer",
+        amount,
+        from: transferForm.from,
+        to: transferForm.to,
+        date: new Date().toISOString()
+      };
+
+      return {
+        ...prev,
+        accounts: updated,
+        transactions: [...prev.transactions, tx]
+      };
+    });
+
+    setTransferForm({ from: "us_checking", to: "us_savings", amount: "" });
   }
 
-  const income = financeData.transactions
+  /* ---------------- FILTERED DATA ---------------- */
+
+  const filteredTransactions = useMemo(() => {
+    return financeData.transactions.filter(t => {
+      const d = new Date(t.date);
+
+      if (filter.month !== "all" && d.getMonth() !== parseInt(filter.month)) return false;
+      if (filter.year !== "all" && d.getFullYear() !== parseInt(filter.year)) return false;
+
+      return true;
+    });
+  }, [financeData.transactions, filter]);
+
+  /* ---------------- METRICS ---------------- */
+
+  const income = filteredTransactions
     .filter(t => t.type === "deposit")
     .reduce((s, t) => s + t.amount, 0);
 
-  const expenses = financeData.transactions
+  const expenses = filteredTransactions
     .filter(t => t.type === "expense")
     .reduce((s, t) => s + t.amount, 0);
 
   const savings = income - expenses;
 
-  const accountKeys = Object.keys(financeData.accounts);
+  /* ---------------- CHART DATA ---------------- */
+
+  const chartData = useMemo(() => {
+    const map = {};
+
+    filteredTransactions.forEach(t => {
+      const month = new Date(t.date).getMonth();
+
+      if (!map[month]) {
+        map[month] = { month, income: 0, expenses: 0 };
+      }
+
+      if (t.type === "deposit") map[month].income += t.amount;
+      if (t.type === "expense") map[month].expenses += t.amount;
+    });
+
+    return Object.values(map);
+  }, [filteredTransactions]);
+
+  const accounts = financeData.accounts;
 
   return (
     <div className="min-h-screen bg-black text-white p-6 space-y-6">
 
-      {/* TITLE */}
+      {/* HEADER */}
       <div>
         <h1 className="text-3xl font-bold text-purple-400">
-          Finance Dashboard
+          Finance Control Center
         </h1>
       </div>
 
       {/* TABS */}
       <div className="flex gap-2">
-        {["overview", "accounts", "transactions", "payslips"].map(t => (
+        {["overview", "transactions", "transfer", "charts"].map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -138,80 +192,35 @@ export default function Page() {
       {/* OVERVIEW */}
       {tab === "overview" && (
         <div className="grid grid-cols-3 gap-4">
-          <Card title="Income" value={income} color="green" />
-          <Card title="Expenses" value={expenses} color="red" />
-          <Card title="Savings" value={savings} color="blue" />
+          <Card title="Income" value={income} />
+          <Card title="Expenses" value={expenses} />
+          <Card title="Savings" value={savings} />
         </div>
       )}
 
-      {/* ACCOUNTS */}
-      {tab === "accounts" && (
-        <div className="grid grid-cols-3 gap-4">
-          {accountKeys.map(k => (
-            <div key={k} className="bg-zinc-900 p-4 rounded-xl">
-              <p className="text-gray-400">{k}</p>
-              <p className="text-blue-400 text-xl">
-                ${financeData.accounts[k]}
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* TRANSACTIONS (FIXED — INPUT IS HERE) */}
+      {/* TRANSACTIONS */}
       {tab === "transactions" && (
         <div className="space-y-4">
 
-          {/* ADD FORM */}
+          {/* ADD */}
           <div className="bg-zinc-900 p-4 rounded-xl space-y-2">
-            <h2 className="text-purple-300 font-bold">Add Transaction</h2>
-
             <input
-              className="bg-zinc-800 p-2 rounded w-full"
+              className="bg-zinc-800 p-2 w-full rounded"
               placeholder="Amount"
               value={txForm.amount}
               onChange={e => setTxForm({ ...txForm, amount: e.target.value })}
             />
 
-            <select
-              className="bg-zinc-800 p-2 rounded w-full"
-              value={txForm.type}
-              onChange={e => setTxForm({ ...txForm, type: e.target.value })}
-            >
-              <option value="expense">Expense</option>
-              <option value="deposit">Deposit</option>
-            </select>
-
-            <input
-              className="bg-zinc-800 p-2 rounded w-full"
-              placeholder="Category"
-              value={txForm.category}
-              onChange={e => setTxForm({ ...txForm, category: e.target.value })}
-            />
-
-            <select
-              className="bg-zinc-800 p-2 rounded w-full"
-              value={txForm.account}
-              onChange={e => setTxForm({ ...txForm, account: e.target.value })}
-            >
-              <option value="us_checking">US Checking</option>
-              <option value="us_savings">US Savings</option>
-              <option value="il_account">Israel Account</option>
-            </select>
-
-            <button
-              onClick={addTransaction}
-              className="bg-purple-500 px-4 py-2 rounded"
-            >
+            <button onClick={addTransaction} className="bg-purple-500 px-4 py-2 rounded">
               Add Transaction
             </button>
           </div>
 
           {/* LIST */}
           <div className="bg-zinc-900 p-4 rounded-xl">
-            {financeData.transactions.map(t => (
+            {filteredTransactions.map(t => (
               <div key={t.id} className="border-b border-zinc-700 py-1">
-                {t.type === "deposit" ? "+" : "-"} ${t.amount} | {t.category}
+                {t.type} - ${t.amount}
               </div>
             ))}
           </div>
@@ -219,32 +228,82 @@ export default function Page() {
         </div>
       )}
 
-      {/* PAYSLIPS */}
-      {tab === "payslips" && (
+      {/* TRANSFER */}
+      {tab === "transfer" && (
         <div className="bg-zinc-900 p-4 rounded-xl space-y-2">
 
-          <h2 className="text-purple-300 font-bold">Add Payslip</h2>
-
-          <input
-            className="bg-zinc-800 p-2 rounded w-full"
-            placeholder="Gross"
-            value={payForm.gross}
-            onChange={e => setPayForm({ ...payForm, gross: e.target.value })}
-          />
-
-          <input
-            className="bg-zinc-800 p-2 rounded w-full"
-            placeholder="Tax"
-            value={payForm.tax}
-            onChange={e => setPayForm({ ...payForm, tax: e.target.value })}
-          />
-
-          <button
-            onClick={addPayslip}
-            className="bg-green-500 px-4 py-2 rounded"
+          <select
+            className="bg-zinc-800 p-2 w-full"
+            value={transferForm.from}
+            onChange={e => setTransferForm({ ...transferForm, from: e.target.value })}
           >
-            Add Payslip
+            <option value="us_checking">US Checking</option>
+            <option value="us_savings">US Savings</option>
+            <option value="il_account">Israel</option>
+          </select>
+
+          <select
+            className="bg-zinc-800 p-2 w-full"
+            value={transferForm.to}
+            onChange={e => setTransferForm({ ...transferForm, to: e.target.value })}
+          >
+            <option value="us_checking">US Checking</option>
+            <option value="us_savings">US Savings</option>
+            <option value="il_account">Israel</option>
+          </select>
+
+          <input
+            className="bg-zinc-800 p-2 w-full"
+            placeholder="Amount"
+            value={transferForm.amount}
+            onChange={e => setTransferForm({ ...transferForm, amount: e.target.value })}
+          />
+
+          <button onClick={transfer} className="bg-green-500 px-4 py-2 rounded">
+            Transfer
           </button>
+
+        </div>
+      )}
+
+      {/* CHARTS */}
+      {tab === "charts" && (
+        <div className="space-y-4">
+
+          {/* FILTERS */}
+          <div className="flex gap-2">
+            <select
+              className="bg-zinc-800 p-2"
+              onChange={e => setFilter({ ...filter, month: e.target.value })}
+            >
+              <option value="all">All Months</option>
+              <option value="0">Jan</option>
+              <option value="1">Feb</option>
+              <option value="2">Mar</option>
+              <option value="3">Apr</option>
+            </select>
+
+            <select
+              className="bg-zinc-800 p-2"
+              onChange={e => setFilter({ ...filter, year: e.target.value })}
+            >
+              <option value="all">All Years</option>
+              <option value="2026">2026</option>
+            </select>
+          </div>
+
+          {/* BAR */}
+          <div className="bg-zinc-900 p-4 rounded-xl">
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={chartData}>
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="income" fill="#22c55e" />
+                <Bar dataKey="expenses" fill="#ef4444" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
 
         </div>
       )}
@@ -254,11 +313,11 @@ export default function Page() {
 }
 
 /* CARD */
-function Card({ title, value, color }) {
+function Card({ title, value }) {
   return (
     <div className="bg-zinc-900 p-4 rounded-xl">
       <p className="text-gray-400">{title}</p>
-      <p className={`text-${color}-400 text-xl`}>${value}</p>
+      <p className="text-purple-400 text-xl">${value}</p>
     </div>
   );
 }
