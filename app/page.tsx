@@ -1,16 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar
-} from "recharts";
+import { useEffect, useState } from "react";
 
 export default function Page() {
   const [financeData, setFinanceData] = useState({
@@ -25,22 +15,18 @@ export default function Page() {
 
   const [tab, setTab] = useState("overview");
 
-  const [filter, setFilter] = useState({
-    month: "all",
-    year: "all"
-  });
-
   const [txForm, setTxForm] = useState({
-    amount: "",
     type: "expense",
+    amount: "",
     category: "",
     account: "us_checking"
   });
 
-  const [transferForm, setTransferForm] = useState({
-    from: "us_checking",
-    to: "us_savings",
-    amount: ""
+  const [payForm, setPayForm] = useState({
+    gross: "",
+    tax: "",
+    country: "US",
+    source: ""
   });
 
   /* ---------------- LOAD / SAVE ---------------- */
@@ -54,7 +40,7 @@ export default function Page() {
     localStorage.setItem("finance-data", JSON.stringify(financeData));
   }, [financeData]);
 
-  /* ---------------- ADD TRANSACTION ---------------- */
+  /* ---------------- TRANSACTIONS ---------------- */
 
   function addTransaction() {
     if (!txForm.amount) return;
@@ -84,85 +70,68 @@ export default function Page() {
       };
     });
 
-    setTxForm({ amount: "", type: "expense", category: "", account: "us_checking" });
+    setTxForm({ type: "expense", amount: "", category: "", account: "us_checking" });
   }
 
-  /* ---------------- TRANSFER BETWEEN ACCOUNTS ---------------- */
-
-  function transfer() {
-    const amount = parseFloat(transferForm.amount);
-    if (!amount) return;
-
-    setFinanceData(prev => {
-      const updated = { ...prev.accounts };
-
-      updated[transferForm.from] -= amount;
-      updated[transferForm.to] += amount;
-
-      const tx = {
-        id: Date.now(),
-        type: "transfer",
-        amount,
-        from: transferForm.from,
-        to: transferForm.to,
-        date: new Date().toISOString()
-      };
-
-      return {
-        ...prev,
-        accounts: updated,
-        transactions: [...prev.transactions, tx]
-      };
-    });
-
-    setTransferForm({ from: "us_checking", to: "us_savings", amount: "" });
+  function deleteTransaction(id) {
+    setFinanceData(prev => ({
+      ...prev,
+      transactions: prev.transactions.filter(t => t.id !== id)
+    }));
   }
 
-  /* ---------------- FILTERED DATA ---------------- */
+  /* ---------------- PAYSLIPS ---------------- */
 
-  const filteredTransactions = useMemo(() => {
-    return financeData.transactions.filter(t => {
-      const d = new Date(t.date);
+  function addPayslip() {
+    if (!payForm.gross) return;
 
-      if (filter.month !== "all" && d.getMonth() !== parseInt(filter.month)) return false;
-      if (filter.year !== "all" && d.getFullYear() !== parseInt(filter.year)) return false;
+    const gross = parseFloat(payForm.gross);
+    const tax = parseFloat(payForm.tax || 0);
+    const net = gross - tax;
 
-      return true;
-    });
-  }, [financeData.transactions, filter]);
+    const slip = {
+      id: Date.now(),
+      gross,
+      tax,
+      net,
+      country: payForm.country,
+      source: payForm.source || "Employer",
+      date: new Date().toISOString()
+    };
 
-  /* ---------------- METRICS ---------------- */
+    setFinanceData(prev => ({
+      ...prev,
+      payslips: [...prev.payslips, slip]
+    }));
 
-  const income = filteredTransactions
+    setPayForm({ gross: "", tax: "", country: "US", source: "" });
+  }
+
+  function deletePayslip(id) {
+    setFinanceData(prev => ({
+      ...prev,
+      payslips: prev.payslips.filter(p => p.id !== id)
+    }));
+  }
+
+  /* ---------------- ANALYTICS (OPTION B) ---------------- */
+
+  const income = financeData.transactions
     .filter(t => t.type === "deposit")
     .reduce((s, t) => s + t.amount, 0);
 
-  const expenses = filteredTransactions
+  const expenses = financeData.transactions
     .filter(t => t.type === "expense")
     .reduce((s, t) => s + t.amount, 0);
 
   const savings = income - expenses;
 
-  /* ---------------- CHART DATA ---------------- */
+  const savingsRate = income > 0 ? ((savings / income) * 100).toFixed(1) : 0;
 
-  const chartData = useMemo(() => {
-    const map = {};
+  const monthlyGoal = 2000; // you can later make this editable
+  const goalProgress = (savings / monthlyGoal) * 100;
 
-    filteredTransactions.forEach(t => {
-      const month = new Date(t.date).getMonth();
-
-      if (!map[month]) {
-        map[month] = { month, income: 0, expenses: 0 };
-      }
-
-      if (t.type === "deposit") map[month].income += t.amount;
-      if (t.type === "expense") map[month].expenses += t.amount;
-    });
-
-    return Object.values(map);
-  }, [filteredTransactions]);
-
-  const accounts = financeData.accounts;
+  const accountKeys = Object.keys(financeData.accounts);
 
   return (
     <div className="min-h-screen bg-black text-white p-6 space-y-6">
@@ -170,13 +139,16 @@ export default function Page() {
       {/* HEADER */}
       <div>
         <h1 className="text-3xl font-bold text-purple-400">
-          Finance Control Center
+          Finance Intelligence System
         </h1>
+        <p className="text-gray-400">
+          Track • Analyze • Improve
+        </p>
       </div>
 
       {/* TABS */}
       <div className="flex gap-2">
-        {["overview", "transactions", "transfer", "charts"].map(t => (
+        {["overview", "accounts", "transactions", "payslips", "insights"].map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -192,20 +164,32 @@ export default function Page() {
       {/* OVERVIEW */}
       {tab === "overview" && (
         <div className="grid grid-cols-3 gap-4">
-          <Card title="Income" value={income} />
-          <Card title="Expenses" value={expenses} />
-          <Card title="Savings" value={savings} />
+          <Card title="Income" value={income} color="green" />
+          <Card title="Expenses" value={expenses} color="red" />
+          <Card title="Savings" value={savings} color="blue" />
         </div>
       )}
 
-      {/* TRANSACTIONS */}
+      {/* ACCOUNTS HISTORY */}
+      {tab === "accounts" && (
+        <div className="space-y-4">
+          {accountKeys.map(k => (
+            <div key={k} className="bg-zinc-900 p-4 rounded-xl">
+              <p className="text-gray-400">{k}</p>
+              <p className="text-blue-400 text-xl">${financeData.accounts[k]}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* TRANSACTIONS + DELETE */}
       {tab === "transactions" && (
         <div className="space-y-4">
 
           {/* ADD */}
           <div className="bg-zinc-900 p-4 rounded-xl space-y-2">
             <input
-              className="bg-zinc-800 p-2 w-full rounded"
+              className="bg-zinc-800 p-2 rounded w-full"
               placeholder="Amount"
               value={txForm.amount}
               onChange={e => setTxForm({ ...txForm, amount: e.target.value })}
@@ -216,11 +200,20 @@ export default function Page() {
             </button>
           </div>
 
-          {/* LIST */}
+          {/* HISTORY */}
           <div className="bg-zinc-900 p-4 rounded-xl">
-            {filteredTransactions.map(t => (
-              <div key={t.id} className="border-b border-zinc-700 py-1">
-                {t.type} - ${t.amount}
+            {financeData.transactions.map(t => (
+              <div key={t.id} className="flex justify-between border-b border-zinc-700 py-1">
+                <span>
+                  {t.type === "deposit" ? "+" : "-"} ${t.amount}
+                </span>
+
+                <button
+                  onClick={() => deleteTransaction(t.id)}
+                  className="text-red-400"
+                >
+                  delete
+                </button>
               </div>
             ))}
           </div>
@@ -228,82 +221,53 @@ export default function Page() {
         </div>
       )}
 
-      {/* TRANSFER */}
-      {tab === "transfer" && (
-        <div className="bg-zinc-900 p-4 rounded-xl space-y-2">
+      {/* PAYSLIPS + DELETE */}
+      {tab === "payslips" && (
+        <div className="space-y-4">
 
-          <select
-            className="bg-zinc-800 p-2 w-full"
-            value={transferForm.from}
-            onChange={e => setTransferForm({ ...transferForm, from: e.target.value })}
-          >
-            <option value="us_checking">US Checking</option>
-            <option value="us_savings">US Savings</option>
-            <option value="il_account">Israel</option>
-          </select>
+          <div className="bg-zinc-900 p-4 rounded-xl space-y-2">
+            <input
+              className="bg-zinc-800 p-2 rounded w-full"
+              placeholder="Gross"
+              value={payForm.gross}
+              onChange={e => setPayForm({ ...payForm, gross: e.target.value })}
+            />
 
-          <select
-            className="bg-zinc-800 p-2 w-full"
-            value={transferForm.to}
-            onChange={e => setTransferForm({ ...transferForm, to: e.target.value })}
-          >
-            <option value="us_checking">US Checking</option>
-            <option value="us_savings">US Savings</option>
-            <option value="il_account">Israel</option>
-          </select>
+            <button onClick={addPayslip} className="bg-green-500 px-4 py-2 rounded">
+              Add Payslip
+            </button>
+          </div>
 
-          <input
-            className="bg-zinc-800 p-2 w-full"
-            placeholder="Amount"
-            value={transferForm.amount}
-            onChange={e => setTransferForm({ ...transferForm, amount: e.target.value })}
-          />
-
-          <button onClick={transfer} className="bg-green-500 px-4 py-2 rounded">
-            Transfer
-          </button>
+          <div className="bg-zinc-900 p-4 rounded-xl">
+            {financeData.payslips.map(p => (
+              <div key={p.id} className="flex justify-between border-b border-zinc-700 py-1">
+                <span>${p.net}</span>
+                <button onClick={() => deletePayslip(p.id)} className="text-red-400">
+                  delete
+                </button>
+              </div>
+            ))}
+          </div>
 
         </div>
       )}
 
-      {/* CHARTS */}
-      {tab === "charts" && (
-        <div className="space-y-4">
+      {/* INSIGHTS (OPTION B) */}
+      {tab === "insights" && (
+        <div className="bg-zinc-900 p-4 rounded-xl space-y-2">
 
-          {/* FILTERS */}
-          <div className="flex gap-2">
-            <select
-              className="bg-zinc-800 p-2"
-              onChange={e => setFilter({ ...filter, month: e.target.value })}
-            >
-              <option value="all">All Months</option>
-              <option value="0">Jan</option>
-              <option value="1">Feb</option>
-              <option value="2">Mar</option>
-              <option value="3">Apr</option>
-            </select>
+          <h2 className="text-purple-300 font-bold">Financial Intelligence</h2>
 
-            <select
-              className="bg-zinc-800 p-2"
-              onChange={e => setFilter({ ...filter, year: e.target.value })}
-            >
-              <option value="all">All Years</option>
-              <option value="2026">2026</option>
-            </select>
-          </div>
+          <p>Savings Rate: {savingsRate}%</p>
+          <p>Monthly Goal Progress: {goalProgress.toFixed(1)}%</p>
 
-          {/* BAR */}
-          <div className="bg-zinc-900 p-4 rounded-xl">
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={chartData}>
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="income" fill="#22c55e" />
-                <Bar dataKey="expenses" fill="#ef4444" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <p>
+            {savingsRate > 20
+              ? "Strong savings month"
+              : savingsRate > 0
+              ? "Moderate savings"
+              : "Overspending detected"}
+          </p>
 
         </div>
       )}
@@ -313,11 +277,11 @@ export default function Page() {
 }
 
 /* CARD */
-function Card({ title, value }) {
+function Card({ title, value, color }) {
   return (
     <div className="bg-zinc-900 p-4 rounded-xl">
       <p className="text-gray-400">{title}</p>
-      <p className="text-purple-400 text-xl">${value}</p>
+      <p className={`text-${color}-400 text-xl`}>${value}</p>
     </div>
   );
 }
