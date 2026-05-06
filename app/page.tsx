@@ -67,7 +67,7 @@ export default function Page() {
       id: Date.now(),
       type: txForm.type,
       amount: parseFloat(txForm.amount),
-      category: txForm.category,
+      category: txForm.category || "General",
       description: txForm.description,
       account: txForm.account,
       date: new Date().toISOString()
@@ -96,6 +96,13 @@ export default function Page() {
       description: "",
       account: "us_checking"
     });
+  }
+
+  function deleteTransaction(id) {
+    setFinanceData(prev => ({
+      ...prev,
+      transactions: prev.transactions.filter(t => t.id !== id)
+    }));
   }
 
   /* ---------------- TRANSFERS ---------------- */
@@ -181,6 +188,13 @@ export default function Page() {
     });
   }
 
+  function deletePayslip(id) {
+    setFinanceData(prev => ({
+      ...prev,
+      payslips: prev.payslips.filter(p => p.id !== id)
+    }));
+  }
+
   /* ---------------- CALCULATIONS ---------------- */
 
   const income = financeData.transactions
@@ -193,16 +207,18 @@ export default function Page() {
 
   const savings = income - expenses;
 
+  const savingsRate = income > 0 ? ((savings / income) * 100).toFixed(1) : 0;
+
   return (
     <div className="min-h-screen bg-black text-white p-6 space-y-6">
 
       <h1 className="text-3xl text-purple-400 font-bold">
-        Finance OS (Phase 2)
+        Finance OS (Full Unified Version)
       </h1>
 
       {/* TABS */}
-      <div className="flex gap-2">
-        {["overview", "transfer", "notes", "payslips"].map(t => (
+      <div className="flex gap-2 flex-wrap">
+        {["overview", "accounts", "transactions", "transfer", "notes", "payslips", "insights"].map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -221,42 +237,60 @@ export default function Page() {
           <p>Income: ${income}</p>
           <p>Expenses: ${expenses}</p>
           <p>Savings: ${savings}</p>
+          <p>Savings Rate: {savingsRate}%</p>
+        </div>
+      )}
+
+      {/* ACCOUNTS */}
+      {tab === "accounts" && (
+        <div className="grid grid-cols-3 gap-4">
+          {Object.entries(financeData.accounts).map(([k, v]) => (
+            <div key={k} className="bg-zinc-900 p-4 rounded-xl">
+              <p className="text-gray-400">{k}</p>
+              <p className="text-blue-400 text-xl">${v}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* TRANSACTIONS */}
+      {tab === "transactions" && (
+        <div className="space-y-4">
+
+          <div className="bg-zinc-900 p-4 rounded-xl space-y-2">
+            <input
+              className="bg-zinc-800 p-2 rounded w-full"
+              placeholder="Amount"
+              value={txForm.amount}
+              onChange={e => setTxForm({ ...txForm, amount: e.target.value })}
+            />
+
+            <button onClick={addTransaction} className="bg-purple-500 px-4 py-2 rounded">
+              Add Transaction
+            </button>
+          </div>
+
+          <div className="bg-zinc-900 p-4 rounded-xl">
+            {financeData.transactions.map(t => (
+              <div key={t.id} className="flex justify-between border-b border-zinc-700 py-1">
+                <span>{t.type} ${t.amount}</span>
+                <button onClick={() => deleteTransaction(t.id)} className="text-red-400">
+                  delete
+                </button>
+              </div>
+            ))}
+          </div>
+
         </div>
       )}
 
       {/* TRANSFER */}
       {tab === "transfer" && (
         <div className="bg-zinc-900 p-4 rounded-xl space-y-2">
-          <h2 className="text-purple-300">Transfer Between Accounts</h2>
-
-          <select
-            value={transferForm.from}
-            onChange={e =>
-              setTransferForm({ ...transferForm, from: e.target.value })
-            }
-          >
-            <option value="us_checking">US Checking</option>
-            <option value="us_savings">US Savings</option>
-            <option value="il_account">Israel</option>
-          </select>
-
-          <select
-            value={transferForm.to}
-            onChange={e =>
-              setTransferForm({ ...transferForm, to: e.target.value })
-            }
-          >
-            <option value="us_checking">US Checking</option>
-            <option value="us_savings">US Savings</option>
-            <option value="il_account">Israel</option>
-          </select>
-
           <input
             placeholder="Amount"
             value={transferForm.amount}
-            onChange={e =>
-              setTransferForm({ ...transferForm, amount: e.target.value })
-            }
+            onChange={e => setTransferForm({ ...transferForm, amount: e.target.value })}
           />
 
           <button onClick={addTransfer} className="bg-purple-500 px-4 py-2 rounded">
@@ -269,22 +303,11 @@ export default function Page() {
       {tab === "notes" && (
         <div className="bg-zinc-900 p-4 rounded-xl space-y-2">
 
-          <h2 className="text-purple-300">Monthly Notes</h2>
-
-          <input
-            placeholder="Month (0-11)"
-            value={noteForm.month}
-            onChange={e =>
-              setNoteForm({ ...noteForm, month: e.target.value })
-            }
-          />
-
           <textarea
-            placeholder="Why was this month expensive?"
+            placeholder="Monthly notes..."
             value={noteForm.text}
-            onChange={e =>
-              setNoteForm({ ...noteForm, text: e.target.value })
-            }
+            onChange={e => setNoteForm({ ...noteForm, text: e.target.value })}
+            className="bg-zinc-800 p-2 rounded w-full"
           />
 
           <button onClick={saveNote} className="bg-green-500 px-4 py-2 rounded">
@@ -298,28 +321,33 @@ export default function Page() {
       {tab === "payslips" && (
         <div className="bg-zinc-900 p-4 rounded-xl space-y-2">
 
-          <h2 className="text-purple-300">Payslips</h2>
-
-          <input placeholder="Gross" value={payForm.gross}
+          <input
+            placeholder="Gross"
+            value={payForm.gross}
             onChange={e => setPayForm({ ...payForm, gross: e.target.value })}
-          />
-
-          <input placeholder="Tax" value={payForm.tax}
-            onChange={e => setPayForm({ ...payForm, tax: e.target.value })}
-          />
-
-          <input placeholder="Tax Type" value={payForm.taxType}
-            onChange={e => setPayForm({ ...payForm, taxType: e.target.value })}
-          />
-
-          <input placeholder="Source" value={payForm.source}
-            onChange={e => setPayForm({ ...payForm, source: e.target.value })}
+            className="bg-zinc-800 p-2 rounded w-full"
           />
 
           <button onClick={addPayslip} className="bg-green-500 px-4 py-2 rounded">
             Add Payslip
           </button>
 
+          <div>
+            {financeData.payslips.map(p => (
+              <div key={p.id} className="flex justify-between">
+                <span>${p.net}</span>
+                <button onClick={() => deletePayslip(p.id)}>delete</button>
+              </div>
+            ))}
+          </div>
+
+        </div>
+      )}
+
+      {/* INSIGHTS */}
+      {tab === "insights" && (
+        <div className="bg-zinc-900 p-4 rounded-xl">
+          <p>Savings Rate: {savingsRate}%</p>
         </div>
       )}
 
