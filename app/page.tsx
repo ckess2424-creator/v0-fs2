@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export default function Page() {
   const [financeData, setFinanceData] = useState({
@@ -9,17 +9,27 @@ export default function Page() {
       us_savings: 0,
       il_account: 0
     },
-    transactions: []
+    transactions: [],
+    payslips: []
   });
 
   const [tab, setTab] = useState("overview");
 
-  const [form, setForm] = useState({
+  const [txForm, setTxForm] = useState({
     type: "expense",
     amount: "",
     category: "",
     account: "us_checking"
   });
+
+  const [payForm, setPayForm] = useState({
+    gross: "",
+    tax: "",
+    country: "US",
+    source: ""
+  });
+
+  /* ---------------- LOAD / SAVE ---------------- */
 
   useEffect(() => {
     const saved = localStorage.getItem("finance-data");
@@ -30,15 +40,17 @@ export default function Page() {
     localStorage.setItem("finance-data", JSON.stringify(financeData));
   }, [financeData]);
 
+  /* ---------------- TRANSACTIONS ---------------- */
+
   function addTransaction() {
-    if (!form.amount) return;
+    if (!txForm.amount) return;
 
     const tx = {
       id: Date.now(),
-      type: form.type,
-      amount: parseFloat(form.amount),
-      category: form.category || "General",
-      account: form.account,
+      type: txForm.type,
+      amount: parseFloat(txForm.amount),
+      category: txForm.category || "General",
+      account: txForm.account,
       date: new Date().toISOString()
     };
 
@@ -52,29 +64,87 @@ export default function Page() {
       }
 
       return {
+        ...prev,
         accounts: updated,
         transactions: [...prev.transactions, tx]
       };
     });
 
-    setForm({ type: "expense", amount: "", category: "", account: "us_checking" });
+    setTxForm({ type: "expense", amount: "", category: "", account: "us_checking" });
   }
 
-  const income = financeData.transactions
+  /* ---------------- PAYSLIPS ---------------- */
+
+  function addPayslip() {
+    if (!payForm.gross) return;
+
+    const gross = parseFloat(payForm.gross);
+    const tax = parseFloat(payForm.tax || 0);
+    const net = gross - tax;
+
+    const slip = {
+      id: Date.now(),
+      gross,
+      tax,
+      net,
+      country: payForm.country,
+      source: payForm.source || "Employer",
+      date: new Date().toISOString()
+    };
+
+    setFinanceData(prev => ({
+      ...prev,
+      payslips: [...prev.payslips, slip]
+    }));
+
+    setPayForm({ gross: "", tax: "", country: "US", source: "" });
+  }
+
+  /* ---------------- ANALYTICS ENGINE ---------------- */
+
+  const thisMonth = new Date().getMonth();
+  const thisYear = new Date().getFullYear();
+
+  const monthlyTx = financeData.transactions.filter(t => {
+    const d = new Date(t.date);
+    return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+  });
+
+  const monthlyPayslips = financeData.payslips.filter(p => {
+    const d = new Date(p.date);
+    return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+  });
+
+  const income = monthlyTx
     .filter(t => t.type === "deposit")
     .reduce((s, t) => s + t.amount, 0);
 
-  const expenses = financeData.transactions
+  const expenses = monthlyTx
     .filter(t => t.type === "expense")
     .reduce((s, t) => s + t.amount, 0);
 
-  const net = income - expenses;
+  const payslipIncome = monthlyPayslips.reduce((s, p) => s + p.net, 0);
 
-  const accountList = [
-    { key: "us_checking", label: "US Checking" },
-    { key: "us_savings", label: "US Savings" },
-    { key: "il_account", label: "Israel Account" }
-  ];
+  const savings = payslipIncome - expenses;
+
+  /* ---------------- ACCOUNT INSIGHT ---------------- */
+
+  const accountStats = useMemo(() => {
+    const stats = {
+      us: 0,
+      il: 0
+    };
+
+    financeData.transactions.forEach(t => {
+      if (t.account.includes("us")) {
+        stats.us += t.type === "deposit" ? t.amount : -t.amount;
+      } else {
+        stats.il += t.type === "deposit" ? t.amount : -t.amount;
+      }
+    });
+
+    return stats;
+  }, [financeData]);
 
   return (
     <div className="min-h-screen bg-black text-white p-6 space-y-6">
@@ -82,16 +152,16 @@ export default function Page() {
       {/* HEADER */}
       <div>
         <h1 className="text-3xl font-bold text-purple-400">
-          Finance Dashboard
+          Finance Intelligence Dashboard
         </h1>
         <p className="text-gray-400">
-          Track income, expenses, and accounts in one place
+          Income • Spending • Payslips • Savings analysis
         </p>
       </div>
 
       {/* TABS */}
       <div className="flex gap-2">
-        {["overview", "accounts", "transactions"].map(t => (
+        {["overview", "accounts", "transactions", "payslips", "insights"].map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -108,87 +178,96 @@ export default function Page() {
       {tab === "overview" && (
         <>
           <div className="grid grid-cols-3 gap-4">
-            <Card title="Income" value={income} color="green" />
-            <Card title="Expenses" value={expenses} color="red" />
-            <Card title="Net" value={net} color="blue" />
+            <Card title="Spending" value={expenses} color="red" />
+            <Card title="Payslip Income" value={payslipIncome} color="green" />
+            <Card title="Savings" value={savings} color="blue" />
           </div>
 
           <div className="bg-zinc-900 p-4 rounded-xl">
-            <h2 className="text-purple-300 font-bold mb-2">
-              Quick Add Transaction
+            <h2 className="text-purple-300 font-bold">
+              Did you save this month?
             </h2>
-
-            <div className="grid gap-2">
-              <select
-                className="bg-zinc-800 p-2 rounded"
-                value={form.type}
-                onChange={e => setForm({ ...form, type: e.target.value })}
-              >
-                <option value="expense">Expense</option>
-                <option value="deposit">Deposit</option>
-              </select>
-
-              <input
-                className="bg-zinc-800 p-2 rounded"
-                placeholder="Amount"
-                value={form.amount}
-                onChange={e => setForm({ ...form, amount: e.target.value })}
-              />
-
-              <input
-                className="bg-zinc-800 p-2 rounded"
-                placeholder="Category"
-                value={form.category}
-                onChange={e => setForm({ ...form, category: e.target.value })}
-              />
-
-              <select
-                className="bg-zinc-800 p-2 rounded"
-                value={form.account}
-                onChange={e => setForm({ ...form, account: e.target.value })}
-              >
-                {accountList.map(a => (
-                  <option key={a.key} value={a.key}>
-                    {a.label}
-                  </option>
-                ))}
-              </select>
-
-              <button
-                onClick={addTransaction}
-                className="bg-purple-500 px-4 py-2 rounded"
-              >
-                Add Transaction
-              </button>
-            </div>
+            <p className="text-xl mt-2">
+              {savings >= 0 ? "✅ Yes" : "❌ No"}
+            </p>
           </div>
         </>
       )}
 
       {/* ACCOUNTS */}
       {tab === "accounts" && (
-        <div className="grid grid-cols-3 gap-4">
-          {accountList.map(a => (
-            <div key={a.key} className="bg-zinc-900 p-4 rounded-xl">
-              <p className="text-gray-400">{a.label}</p>
-              <p className="text-blue-400 text-xl">
-                ${financeData.accounts[a.key]}
-              </p>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-zinc-900 p-4 rounded-xl">
+            <h2 className="text-blue-400">US Net</h2>
+            <p>${accountStats.us}</p>
+          </div>
+
+          <div className="bg-zinc-900 p-4 rounded-xl">
+            <h2 className="text-yellow-400">Israel Net</h2>
+            <p>${accountStats.il}</p>
+          </div>
         </div>
       )}
 
       {/* TRANSACTIONS */}
       {tab === "transactions" && (
         <div className="bg-zinc-900 p-4 rounded-xl">
-          <h2 className="text-purple-300 font-bold mb-2">All Transactions</h2>
-
-          {financeData.transactions.map(t => (
+          {monthlyTx.map(t => (
             <div key={t.id} className="border-b border-zinc-700 py-1">
-              {t.type === "deposit" ? "+" : "-"} ${t.amount} | {t.category} | {t.account}
+              {t.type === "deposit" ? "+" : "-"} ${t.amount} | {t.category}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* PAYSLIPS */}
+      {tab === "payslips" && (
+        <div className="bg-zinc-900 p-4 rounded-xl space-y-2">
+
+          <h2 className="text-purple-300 font-bold">Add Payslip</h2>
+
+          <input className="bg-zinc-800 p-2 rounded w-full"
+            placeholder="Gross"
+            value={payForm.gross}
+            onChange={e => setPayForm({ ...payForm, gross: e.target.value })}
+          />
+
+          <input className="bg-zinc-800 p-2 rounded w-full"
+            placeholder="Tax"
+            value={payForm.tax}
+            onChange={e => setPayForm({ ...payForm, tax: e.target.value })}
+          />
+
+          <button onClick={addPayslip} className="bg-green-500 px-4 py-2 rounded">
+            Add Payslip
+          </button>
+
+          {monthlyPayslips.map(p => (
+            <div key={p.id} className="border-b border-zinc-700 py-1">
+              Gross: ${p.gross} | Net: ${p.net} | {p.country}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* INSIGHTS */}
+      {tab === "insights" && (
+        <div className="bg-zinc-900 p-4 rounded-xl space-y-2">
+
+          <h2 className="text-purple-300 font-bold">Monthly Insights</h2>
+
+          <p>Income (Payslips): ${payslipIncome}</p>
+          <p>Spending: ${expenses}</p>
+          <p>Savings: ${savings}</p>
+
+          <hr className="border-zinc-700" />
+
+          <p>
+            {savings >= 0
+              ? "You are financially positive this month"
+              : "You are overspending compared to income"}
+          </p>
+
         </div>
       )}
 
