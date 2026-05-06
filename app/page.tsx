@@ -1,5 +1,16 @@
 "use client";
 
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar
+} from "recharts";
+
 import { useEffect, useMemo, useState } from "react";
 
 export default function Page() {
@@ -15,20 +26,6 @@ export default function Page() {
 
   const [tab, setTab] = useState("overview");
 
-  const [txForm, setTxForm] = useState({
-    type: "expense",
-    amount: "",
-    category: "",
-    account: "us_checking"
-  });
-
-  const [payForm, setPayForm] = useState({
-    gross: "",
-    tax: "",
-    country: "US",
-    source: ""
-  });
-
   /* ---------------- LOAD / SAVE ---------------- */
 
   useEffect(() => {
@@ -40,79 +37,18 @@ export default function Page() {
     localStorage.setItem("finance-data", JSON.stringify(financeData));
   }, [financeData]);
 
-  /* ---------------- TRANSACTIONS ---------------- */
+  /* ---------------- CURRENT MONTH DATA ---------------- */
 
-  function addTransaction() {
-    if (!txForm.amount) return;
-
-    const tx = {
-      id: Date.now(),
-      type: txForm.type,
-      amount: parseFloat(txForm.amount),
-      category: txForm.category || "General",
-      account: txForm.account,
-      date: new Date().toISOString()
-    };
-
-    setFinanceData(prev => {
-      const updated = { ...prev.accounts };
-
-      if (tx.type === "deposit") {
-        updated[tx.account] += tx.amount;
-      } else {
-        updated[tx.account] -= tx.amount;
-      }
-
-      return {
-        ...prev,
-        accounts: updated,
-        transactions: [...prev.transactions, tx]
-      };
-    });
-
-    setTxForm({ type: "expense", amount: "", category: "", account: "us_checking" });
-  }
-
-  /* ---------------- PAYSLIPS ---------------- */
-
-  function addPayslip() {
-    if (!payForm.gross) return;
-
-    const gross = parseFloat(payForm.gross);
-    const tax = parseFloat(payForm.tax || 0);
-    const net = gross - tax;
-
-    const slip = {
-      id: Date.now(),
-      gross,
-      tax,
-      net,
-      country: payForm.country,
-      source: payForm.source || "Employer",
-      date: new Date().toISOString()
-    };
-
-    setFinanceData(prev => ({
-      ...prev,
-      payslips: [...prev.payslips, slip]
-    }));
-
-    setPayForm({ gross: "", tax: "", country: "US", source: "" });
-  }
-
-  /* ---------------- ANALYTICS ENGINE ---------------- */
-
-  const thisMonth = new Date().getMonth();
-  const thisYear = new Date().getFullYear();
+  const now = new Date();
 
   const monthlyTx = financeData.transactions.filter(t => {
     const d = new Date(t.date);
-    return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+    return d.getMonth() === now.getMonth();
   });
 
   const monthlyPayslips = financeData.payslips.filter(p => {
     const d = new Date(p.date);
-    return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+    return d.getMonth() === now.getMonth();
   });
 
   const income = monthlyTx
@@ -127,24 +63,29 @@ export default function Page() {
 
   const savings = payslipIncome - expenses;
 
-  /* ---------------- ACCOUNT INSIGHT ---------------- */
+  /* ---------------- MONTHLY HISTORY ---------------- */
 
-  const accountStats = useMemo(() => {
-    const stats = {
-      us: 0,
-      il: 0
-    };
+  const monthlyData = useMemo(() => {
+    const map = {};
 
     financeData.transactions.forEach(t => {
-      if (t.account.includes("us")) {
-        stats.us += t.type === "deposit" ? t.amount : -t.amount;
-      } else {
-        stats.il += t.type === "deposit" ? t.amount : -t.amount;
-      }
+      const key = new Date(t.date).getMonth();
+      if (!map[key]) map[key] = { month: key, income: 0, expenses: 0 };
+
+      if (t.type === "deposit") map[key].income += t.amount;
+      else map[key].expenses += t.amount;
     });
 
-    return stats;
+    return Object.values(map);
   }, [financeData]);
+
+  /* ---------------- CHART DATA ---------------- */
+
+  const chartData = [
+    { name: "Income", value: income },
+    { name: "Expenses", value: expenses },
+    { name: "Savings", value: savings }
+  ];
 
   return (
     <div className="min-h-screen bg-black text-white p-6 space-y-6">
@@ -152,16 +93,16 @@ export default function Page() {
       {/* HEADER */}
       <div>
         <h1 className="text-3xl font-bold text-purple-400">
-          Finance Intelligence Dashboard
+          Finance Analytics Dashboard
         </h1>
         <p className="text-gray-400">
-          Income • Spending • Payslips • Savings analysis
+          Real financial insights + charts
         </p>
       </div>
 
       {/* TABS */}
       <div className="flex gap-2">
-        {["overview", "accounts", "transactions", "payslips", "insights"].map(t => (
+        {["overview", "charts", "insights"].map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -176,77 +117,44 @@ export default function Page() {
 
       {/* OVERVIEW */}
       {tab === "overview" && (
-        <>
-          <div className="grid grid-cols-3 gap-4">
-            <Card title="Spending" value={expenses} color="red" />
-            <Card title="Payslip Income" value={payslipIncome} color="green" />
-            <Card title="Savings" value={savings} color="blue" />
-          </div>
-
-          <div className="bg-zinc-900 p-4 rounded-xl">
-            <h2 className="text-purple-300 font-bold">
-              Did you save this month?
-            </h2>
-            <p className="text-xl mt-2">
-              {savings >= 0 ? "✅ Yes" : "❌ No"}
-            </p>
-          </div>
-        </>
-      )}
-
-      {/* ACCOUNTS */}
-      {tab === "accounts" && (
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-zinc-900 p-4 rounded-xl">
-            <h2 className="text-blue-400">US Net</h2>
-            <p>${accountStats.us}</p>
-          </div>
-
-          <div className="bg-zinc-900 p-4 rounded-xl">
-            <h2 className="text-yellow-400">Israel Net</h2>
-            <p>${accountStats.il}</p>
-          </div>
+        <div className="grid grid-cols-3 gap-4">
+          <Card title="Income" value={income} color="green" />
+          <Card title="Expenses" value={expenses} color="red" />
+          <Card title="Savings" value={savings} color="blue" />
         </div>
       )}
 
-      {/* TRANSACTIONS */}
-      {tab === "transactions" && (
-        <div className="bg-zinc-900 p-4 rounded-xl">
-          {monthlyTx.map(t => (
-            <div key={t.id} className="border-b border-zinc-700 py-1">
-              {t.type === "deposit" ? "+" : "-"} ${t.amount} | {t.category}
-            </div>
-          ))}
-        </div>
-      )}
+      {/* CHARTS */}
+      {tab === "charts" && (
+        <div className="space-y-6">
 
-      {/* PAYSLIPS */}
-      {tab === "payslips" && (
-        <div className="bg-zinc-900 p-4 rounded-xl space-y-2">
+          <div className="bg-zinc-900 p-4 rounded-xl">
+            <h2 className="text-purple-300 mb-2">This Month Breakdown</h2>
 
-          <h2 className="text-purple-300 font-bold">Add Payslip</h2>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={chartData}>
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="value" fill="#a855f7" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
 
-          <input className="bg-zinc-800 p-2 rounded w-full"
-            placeholder="Gross"
-            value={payForm.gross}
-            onChange={e => setPayForm({ ...payForm, gross: e.target.value })}
-          />
+          <div className="bg-zinc-900 p-4 rounded-xl">
+            <h2 className="text-purple-300 mb-2">Monthly Trend</h2>
 
-          <input className="bg-zinc-800 p-2 rounded w-full"
-            placeholder="Tax"
-            value={payForm.tax}
-            onChange={e => setPayForm({ ...payForm, tax: e.target.value })}
-          />
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={monthlyData}>
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip />
+                <Line type="monotone" dataKey="income" stroke="#22c55e" />
+                <Line type="monotone" dataKey="expenses" stroke="#ef4444" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
 
-          <button onClick={addPayslip} className="bg-green-500 px-4 py-2 rounded">
-            Add Payslip
-          </button>
-
-          {monthlyPayslips.map(p => (
-            <div key={p.id} className="border-b border-zinc-700 py-1">
-              Gross: ${p.gross} | Net: ${p.net} | {p.country}
-            </div>
-          ))}
         </div>
       )}
 
@@ -254,7 +162,7 @@ export default function Page() {
       {tab === "insights" && (
         <div className="bg-zinc-900 p-4 rounded-xl space-y-2">
 
-          <h2 className="text-purple-300 font-bold">Monthly Insights</h2>
+          <h2 className="text-purple-300 font-bold">Insights</h2>
 
           <p>Income (Payslips): ${payslipIncome}</p>
           <p>Spending: ${expenses}</p>
@@ -264,8 +172,16 @@ export default function Page() {
 
           <p>
             {savings >= 0
-              ? "You are financially positive this month"
-              : "You are overspending compared to income"}
+              ? "✅ You are saving money this month"
+              : "❌ You are overspending this month"}
+          </p>
+
+          <p>
+            Savings Rate:{" "}
+            {payslipIncome > 0
+              ? ((savings / payslipIncome) * 100).toFixed(1)
+              : 0}
+            %
           </p>
 
         </div>
