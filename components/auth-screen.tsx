@@ -54,7 +54,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
     const hashedPassword = await hashPassword(password)
     localStorage.setItem(AUTH_KEY, hashedPassword)
-    sessionStorage.setItem(SESSION_KEY, "authenticated")
+    localStorage.setItem(SESSION_KEY, "authenticated")
     onAuthenticated()
   }
 
@@ -63,7 +63,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     const hashedInput = await hashPassword(password)
 
     if (hashedInput === storedHash) {
-      sessionStorage.setItem(SESSION_KEY, "authenticated")
+      localStorage.setItem(SESSION_KEY, "authenticated")
       onAuthenticated()
     } else {
       setError("Incorrect password")
@@ -175,8 +175,9 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
 export function useAuth() {
   const logout = () => {
-    sessionStorage.removeItem(SESSION_KEY)
-    window.location.reload()
+  localStorage.removeItem(SESSION_KEY)
+  window.location.reload()
+}
   }
 
   const resetPassword = () => {
