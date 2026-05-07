@@ -38,6 +38,7 @@ export function ExpenseForm({ defaultCurrency, onSubmit, trigger }: ExpenseFormP
   const [date, setDate] = useState(new Date().toISOString().split("T")[0])
 
   const handleSubmit = (e: React.FormEvent) => {
+    console.log("🔥 FORM SUBMIT FIRED")
     e.preventDefault()
     if (!description || !amount || !category || !date) return
 
