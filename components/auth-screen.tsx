@@ -175,9 +175,8 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
 export function useAuth() {
   const logout = () => {
-  localStorage.removeItem(SESSION_KEY)
-  window.location.reload()
-}
+    localStorage.removeItem(SESSION_KEY)
+    window.location.reload()
   }
 
   const resetPassword = () => {
