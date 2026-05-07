@@ -632,6 +632,34 @@ export function ExpenseDashboard() {
               </div>
 
             </div>
+            {/* ISRAELI ACCOUNTS SECTION */}
+<div>
+  <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+
+    <Badge variant="outline" className="font-mono">
+      ILS ₪
+    </Badge>
+
+    Israeli Accounts
+
+  </h2>
+
+  <div className="grid sm:grid-cols-2 gap-4">
+
+    {data.accounts
+      .filter((a) => a.currency === "ILS")
+      .map((account) => (
+        <AccountCard
+          key={account.id}
+          account={account}
+          balanceHistory={getBalanceHistory(account.id)}
+          onUpdateBalance={updateAccountBalance}
+          onDeleteHistoryEntry={deleteBalanceHistoryEntry}
+        />
+      ))}
+
+  </div>
+</div>
 
           </TabsContent>
 
