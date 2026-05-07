@@ -1,4 +1,4 @@
-use client"
+“use client"
 
 import { useMemo, useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -601,72 +601,38 @@ export function ExpenseDashboard() {
 
           {/* ACCOUNTS TAB */}
 
-         <TabsContent value="accounts" className="space-y-6">
+          <TabsContent value="accounts" className="space-y-6">
 
-  {/* ACCOUNTS WRAPPER */}
-  <div className="space-y-10">
+            <div>
 
-    {/* USD ACCOUNTS */}
-    <div>
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
 
-      <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Badge variant="outline" className="font-mono">
+                  USD $
+                </Badge>
 
-        <Badge variant="outline" className="font-mono">
-          USD $
-        </Badge>
+                American Accounts
 
-        American Accounts
+              </h2>
 
-      </h2>
+              <div className="grid sm:grid-cols-2 gap-4">
 
-      <div className="grid sm:grid-cols-2 gap-4">
+                {usAccounts.map((account) => (
 
-        {usAccounts.map((account) => (
-          <AccountCard
-            key={account.id}
-            account={account}
-            balanceHistory={getBalanceHistory(account.id)}
-            onUpdateBalance={updateAccountBalance}
-            onDeleteHistoryEntry={deleteBalanceHistoryEntry}
-          />
-        ))}
+                  <AccountCard
+                    key={account.id}
+                    account={account}
+                    balanceHistory={getBalanceHistory(account.id)}
+                    onUpdateBalance={updateAccountBalance}
+                    onDeleteHistoryEntry={deleteBalanceHistoryEntry}
+                  />
 
-      </div>
+                ))}
 
-    </div>
+              </div>
 
-    {/* ISRAELI ACCOUNTS */}
-    <div>
+            </div>
 
-      <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-
-        <Badge variant="outline" className="font-mono">
-          ILS ₪
-        </Badge>
-
-        Israeli Accounts
-
-      </h2>
-
-      <div className="grid sm:grid-cols-2 gap-4">
-
-        {data.accounts
-          .filter((a) => a.currency === "ILS")
-          .map((account) => (
-            <AccountCard
-              key={account.id}
-              account={account}
-              balanceHistory={getBalanceHistory(account.id)}
-              onUpdateBalance={updateAccountBalance}
-              onDeleteHistoryEntry={deleteBalanceHistoryEntry}
-            />
-          ))}
-
-      </div>
-
-    </div>
-
-  </div>
           </TabsContent>
 
           {/* PAYSLIPS */}
