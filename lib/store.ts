@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { supabase } from "./supabase"
 import type { Account, BalanceHistoryEntry, Expense, FinanceData, Payslip } from "./types"
 
 const STORAGE_KEY = "expense-tracker-data"
@@ -36,62 +37,60 @@ const defaultData: FinanceData = {
   payslips: [],
   balanceHistory: [],
 }
-
-function loadData(): FinanceData {
-  if (typeof window === "undefined") return defaultData
+async function loadData(): Promise<FinanceData> {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      const parsed = JSON.parse(stored)
-      // Ensure default accounts exist
-      const hasUSChecking = parsed.accounts?.some((a: Account) => a.id === "us-checking")
-      const hasUSSavings = parsed.accounts?.some((a: Account) => a.id === "us-savings")
-      const hasILAccount = parsed.accounts?.some((a: Account) => a.id === "il-account")
-      
-      if (!hasUSChecking || !hasUSSavings || !hasILAccount) {
-        const accounts = [...(parsed.accounts || [])]
-        if (!hasUSChecking) accounts.push(defaultData.accounts[0])
-        if (!hasUSSavings) accounts.push(defaultData.accounts[1])
-        if (!hasILAccount) accounts.push(defaultData.accounts[2])
-        parsed.accounts = accounts
-      }
-      
-      return {
-        expenses: parsed.expenses || [],
-        accounts: parsed.accounts || defaultData.accounts,
-        payslips: parsed.payslips || [],
-        balanceHistory: parsed.balanceHistory || [],
-      }
+    const [
+      expensesResult,
+      accountsResult,
+      payslipsResult,
+      balanceHistoryResult,
+    ] = await Promise.all([
+      supabase.from("expenses").select("*"),
+      supabase.from("accounts").select("*"),
+      supabase.from("payslips").select("*"),
+      supabase.from("balance_history").select("*"),
+    ])
+
+    return {
+      expenses: expensesResult.data || [],
+      accounts:
+        accountsResult.data?.length
+          ? accountsResult.data.map((a) => ({
+              ...a,
+              lastUpdated: a.last_updated,
+            }))
+          : defaultData.accounts,
+
+      payslips:
+        payslipsResult.data?.map((p) => ({
+          ...p,
+          createdAt: p.created_at,
+        })) || [],
+
+      balanceHistory:
+        balanceHistoryResult.data?.map((h) => ({
+          ...h,
+          accountId: h.account_id,
+        })) || [],
     }
-  } catch {
-    console.error("Error loading data from localStorage")
-  }
-  return defaultData
-}
-
-function saveData(data: FinanceData) {
-  if (typeof window === "undefined") return
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-  } catch {
-    console.error("Error saving data to localStorage")
+  } catch (error) {
+    console.error("Error loading Supabase data", error)
+    return defaultData
   }
 }
-
 export function useFinanceData() {
   const [data, setData] = useState<FinanceData>(defaultData)
   const [isLoaded, setIsLoaded] = useState(false)
 
-  useEffect(() => {
-    setData(loadData())
+ useEffect(() => {
+  async function fetchData() {
+    const loadedData = await loadData()
+    setData(loadedData)
     setIsLoaded(true)
-  }, [])
+  }
 
-  useEffect(() => {
-    if (isLoaded) {
-      saveData(data)
-    }
-  }, [data, isLoaded])
+  fetchData()
+}, [])
 
   const addExpense = useCallback((expense: Omit<Expense, "id" | "createdAt">) => {
     const newExpense: Expense = {
