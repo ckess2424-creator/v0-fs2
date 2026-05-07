@@ -92,17 +92,37 @@ export function useFinanceData() {
   fetchData()
 }, [])
 
-  const addExpense = useCallback((expense: Omit<Expense, "id" | "createdAt">) => {
-    const newExpense: Expense = {
-      ...expense,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-    }
-    setData((prev) => ({
-      ...prev,
-      expenses: [...prev.expenses, newExpense],
-    }))
-  }, [])
+  const addExpense = useCallback(async (expense: Omit<Expense, "id" | "createdAt">) => {
+  const newExpense = {
+    ...expense,
+    created_at: new Date().toISOString(),
+  }
+
+  const { data, error } = await supabase
+    .from("expenses")
+    .insert([newExpense])
+    .select()
+
+  if (error) {
+    console.error("Failed to add expense:", error)
+    return
+  }
+
+  const inserted = data?.[0]
+
+  if (!inserted) return
+
+  // convert DB format → frontend format
+  const formattedExpense = {
+    ...inserted,
+    createdAt: inserted.created_at,
+  }
+
+  setData((prev) => ({
+    ...prev,
+    expenses: [...prev.expenses, formattedExpense],
+  }))
+}, [])
 
   const updateExpense = useCallback((id: string, expense: Partial<Expense>) => {
     setData((prev) => ({
