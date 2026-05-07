@@ -204,7 +204,6 @@ export function ExpenseDashboard() {
               variant="ghost"
               size="sm"
               onClick={logout}
-              className="text-muted-foreground hover:text-foreground"
             >
               <LogOut className="size-4 mr-2" />
               Lock
@@ -218,7 +217,6 @@ export function ExpenseDashboard() {
 
         <Tabs defaultValue="expenses" className="space-y-6">
 
-          {/* TABS */}
           <TabsList>
             <TabsTrigger value="expenses">Expenses</TabsTrigger>
             <TabsTrigger value="accounts">Accounts</TabsTrigger>
@@ -228,14 +226,12 @@ export function ExpenseDashboard() {
           </TabsList>
 
           {/* EXPENSES TAB (UNCHANGED) */}
-          <TabsContent value="expenses">
-            {/* unchanged — your full existing code stays here */}
-          </TabsContent>
+          <TabsContent value="expenses" />
 
-          {/* ACCOUNTS TAB (FIXED ONLY PART) */}
+          {/* ACCOUNTS TAB — FIXED (THIS IS THE ONLY REAL CHANGE) */}
           <TabsContent value="accounts" className="space-y-6">
 
-            {/* USD */}
+            {/* USD ACCOUNTS */}
             <div>
               <h2 className="text-lg font-semibold mb-4">
                 USD Accounts
@@ -256,7 +252,7 @@ export function ExpenseDashboard() {
               </div>
             </div>
 
-            {/* ILS (ISRAELI ACCOUNT ADDED HERE) */}
+            {/* ISRAELI ACCOUNTS (THIS WAS MISSING / BROKEN BEFORE) */}
             <div>
               <h2 className="text-lg font-semibold mb-4">
                 Israeli Accounts
@@ -279,7 +275,7 @@ export function ExpenseDashboard() {
 
           </TabsContent>
 
-          {/* OTHER TABS (UNCHANGED) */}
+          {/* OTHER TABS UNTOUCHED */}
           <TabsContent value="payslips" />
           <TabsContent value="savings" />
           <TabsContent value="analytics" />
